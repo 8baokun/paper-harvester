@@ -60,10 +60,22 @@ SEARCH_FIELDS = ["IKTE", "IKPYTE", "IKST", "IKET", "IKSE"]
 def _build_search_condition(query: str) -> str:
     """构造 NCPSSD 搜索条件字符串（不编码，直接传给 API）。
 
-    格式: IKTE="关键词" OR IKPYTE="关键词" OR IKST="关键词" OR IKET="关键词" OR IKSE="关键词"
+    格式（与 NCPSSD 网站前端 Master.js 一致）:
+      (IKTE="关键词" OR IKPYTE="关键词"  OR IKST="关键词" OR IKET="关键词" OR IKSE="关键词")
+
+    注意：外层括号必须有，IKPYTE 后两个空格（与网站 JS 源码完全一致）。
+    参考: Master.js L343-344, type="0"（全部文献）的搜索条件构造。
     """
-    parts = [f'{field}="{query}"' for field in SEARCH_FIELDS]
-    return " OR ".join(parts)
+    parts = [
+        f'IKTE="{query}"',
+        f'IKPYTE="{query}"',
+        f'IKST="{query}"',
+        f'IKET="{query}"',
+        f'IKSE="{query}"',
+    ]
+    # IKPYTE 后两个空格（与网站 JS 一致），其余 OR 后一个空格
+    inner = parts[0] + " OR " + parts[1] + "  OR " + " OR ".join(parts[2:])
+    return f"({inner})"
 
 
 def search(query: str, limit: int = MAX_RESULTS_DEFAULT, session: requests.Session = None,

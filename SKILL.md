@@ -1,7 +1,7 @@
 ---
 name: paper-harvester
-version: 0.4.0
-description: 免费学术文献检索与 OA 全文定位、自动下载技能。用 OpenAlex/Crossref/Semantic Scholar/arXiv/NCPSSD 检索文献，自动去重、评级、下载开放获取（OA）PDF。支持国家哲学社会科学文献中心（NCPSSD）登录后自动下载中文论文 PDF，支持微信公众号文章正文提取并保存为 Markdown。v0.4 新增：8级多源降级链（原始URL→Unpaywall→Crossref→OpenAlex→Semantic Scholar→SSRN→EuropePMC→arXiv）、Semantic Scholar OA PDF 源（法学/合规类英文论文覆盖较好）、SSRN 法学预印本源、NCPSSD readDownloadUrl POST API 下载流程修正。
+version: 0.5.0
+description: 免费学术文献检索与 OA 全文定位、自动下载技能。用 OpenAlex/Crossref/Semantic Scholar/arXiv/NCPSSD 检索文献，自动去重、评级、下载开放获取（OA）PDF。支持国家哲学社会科学文献中心（NCPSSD）登录后自动下载中文论文 PDF，支持微信公众号文章搜索（搜狗微信搜索）与正文提取保存为 Markdown。v0.5 新增：搜狗微信公众号文章搜索（search_wechat.py）、NCPSSD 搜索条件格式修正（与网站 JS 一致）。
 ---
 
 # Paper Harvester（论文收割机 · OA + NCPSSD + 微信公众号版）
@@ -27,7 +27,7 @@ description: 免费学术文献检索与 OA 全文定位、自动下载技能。
 5. 中文社科：NCPSSD（可登录下载）> PubScholar > 知网题录 > 学校图书馆。
 6. 英文/跨学科：OpenAlex > Semantic Scholar > Crossref > arXiv/PubMed。
 7. 法学预印本：SSRN（内网可能超时，外网可用）。
-8. 微信公众号文章：直接 URL 提取正文，无需登录。
+8. 微信公众号文章：搜索用 `search_wechat.py`（搜狗微信搜索），下载用 `download_wechat.py`（已知 URL 正文提取）。
 9. 下载限速：每篇间隔 1–3 秒，单源每分钟 ≤ 20 篇，UA 带邮箱，落盘校验 PDF 前缀。
 10. **原子写入**：所有文件写入先写 `.part` 临时文件，成功后 `rename`，防止中断产生半截文件。
 11. **优雅中断**：捕获 Ctrl+C 信号，保存已完成结果后退出。
@@ -42,7 +42,8 @@ description: 免费学术文献检索与 OA 全文定位、自动下载技能。
    - 按期刊名检索 → `scripts/search_ncpssd.py --journal "期刊名"`
    - 英文/跨学科 → 并行调 `scripts/search_openalex.py`、`scripts/search_semantic_scholar.py`、`scripts/search_crossref.py`
    - 预印本 → `scripts/search_arxiv.py`
-   - 微信公众号文章 → `scripts/download_wechat.py`
+   - 微信公众号文章搜索 → `scripts/search_wechat.py`（搜狗微信搜索，获取标题/摘要/公众号/时间）
+   - 微信公众号文章下载 → `scripts/download_wechat.py`（已知 URL 的文章正文提取）
 3. 合并去重（按 DOI / 标题归一化）。
 4. 对每篇判断下载路径：
    - **NCPSSD**（`oa: "ncpssd_login"`）：用户提供了账号 → `scripts/search_ncpssd.py --download`
@@ -107,6 +108,51 @@ cat results.json | python scripts/search_ncpssd.py --stdin --download --user <�
 - **JSON Sidecar**：每篇 PDF 自动生成同名 `.json` 元数据
 - **失败记录**：写入 `failed_downloads.txt`
 - 文件命名：`{年}_{第一作者}_{标题前30字}.pdf`
+
+## 微信公众号文章搜索（v0.5 新增）
+
+### 能力
+- 通过搜狗微信搜索（weixin.sogou.com）搜索微信公众号文章
+- 提取标题、摘要、公众号名称、发布时间
+- 支持多关键词搜索并合并去重
+- 自动翻页（每页约 10 条）
+- 反爬检测（被重定向到 antispider 时自动停止）
+
+### 限制
+- 搜狗返回的文章链接为 `/link?url=...` 跳转链接，跟进会被反爬拦截
+- 因此本脚本只做"搜索 + 元数据收集"，不做全文下载
+- 如需全文，可用 `download_wechat.py` 配合手动获取的微信 URL
+
+### 用法
+```bash
+# 基本搜索
+python scripts/search_wechat.py "自甘风险 民法典1176"
+
+# 指定结果数量
+python scripts/search_wechat.py "业法财融合" --limit 20
+
+# 搜索并保存为 JSON
+python scripts/search_wechat.py "重大过失 体育侵权" -o results.json
+
+# 多关键词搜索（合并去重）
+python scripts/search_wechat.py "自甘风险 体育" "重大过失 竞技体育" --limit 10
+```
+
+### 输出字段
+```json
+{
+  "title": "文章标题",
+  "abstract": "文章摘要...",
+  "account": "公众号名称",
+  "time": "2022-04-01 08:12",
+  "timestamp": 1648775520,
+  "sogou_link": "搜狗跳转链接（无法直接跟进）",
+  "source": "wechat_sogou",
+  "oa": false,
+  "search_engine": "sogou_weixin",
+  "search_time": "搜索时间"
+}
+```
 
 ## 微信公众号文章下载
 
