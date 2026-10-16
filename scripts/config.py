@@ -73,6 +73,22 @@ UNPAYWALL_API = "https://api.unpaywall.org/v2/{doi}"
 SSRN_SEARCH_URL = "https://papers.ssrn.com/sol3/results.cfm"
 SSRN_PDF_BASE = "https://papers.ssrn.com/sol3/Delivery.cfm"
 
+# ── RRF 多源融合 ──────────────────────────────────────
+RRF_K = int(os.environ.get("PH_RRF_K", "60"))  # RRF 平滑参数（经验值 60）
+
+# ── 去重 ──────────────────────────────────────────────
+DEDUP_SIMILARITY_THRESHOLD = float(os.environ.get("PH_DEDUP_THRESHOLD", "0.8"))  # Jaccard 相似度阈值
+
+# ── 缓存 ──────────────────────────────────────────────
+CACHE_DB_PATH = os.environ.get("PH_CACHE_DB", os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "search_cache.db"))
+CACHE_TTL = int(os.environ.get("PH_CACHE_TTL", str(7 * 24 * 3600)))  # 缓存有效期（秒），默认 7 天
+
+# ── 反思循环 ──────────────────────────────────────────
+REFLECT_MIN_RESULTS = int(os.environ.get("PH_REFLECT_MIN", "5"))  # 触发反思的最少结果数
+REFLECT_MAX_EXPANSIONS = int(os.environ.get("PH_REFLECT_MAX_EXP", "5"))  # 最大子查询数
+REFLECT_SUB_LIMIT = int(os.environ.get("PH_REFLECT_SUB_LIMIT", "10"))  # 补充搜索每次结果上限
+
 # ── 排序权重（SKILL.md 定义的五维权重）────────────────
 SORT_WEIGHTS = {
     "relevance": 0.35,   # 相关性（关键词匹配度）

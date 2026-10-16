@@ -1,7 +1,7 @@
 ---
 name: paper-harvester
-version: 0.5.0
-description: 免费学术文献检索与 OA 全文定位、自动下载技能。用 OpenAlex/Crossref/Semantic Scholar/arXiv/NCPSSD 检索文献，自动去重、评级、下载开放获取（OA）PDF。支持国家哲学社会科学文献中心（NCPSSD）登录后自动下载中文论文 PDF，支持微信公众号文章搜索（搜狗微信搜索）与正文提取保存为 Markdown。v0.5 新增：搜狗微信公众号文章搜索（search_wechat.py）、NCPSSD 搜索条件格式修正（与网站 JS 一致）。
+version: 0.6.0
+description: 免费学术文献检索与 OA 全文定位、自动下载技能。用 OpenAlex/Crossref/Semantic Scholar/arXiv/NCPSSD 检索文献，自动去重、评级、下载开放获取（OA）PDF。支持国家哲学社会科学文献中心（NCPSSD）登录后自动下载中文论文 PDF，支持微信公众号文章搜索（搜狗微信搜索）与正文提取保存为 Markdown。v0.6 新增：RRF 多源结果融合（fuse.py）、SQLite 搜索结果缓存（cache.py）、反思循环自动补充搜索（reflect.py）、跨源智能去重（dedup.py，DOI+标题归一化+Jaccard 近重检测）。
 ---
 
 # Paper Harvester（论文收割机 · OA + NCPSSD + 微信公众号版）
@@ -44,7 +44,9 @@ description: 免费学术文献检索与 OA 全文定位、自动下载技能。
    - 预印本 → `scripts/search_arxiv.py`
    - 微信公众号文章搜索 → `scripts/search_wechat.py`（搜狗微信搜索，获取标题/摘要/公众号/时间）
    - 微信公众号文章下载 → `scripts/download_wechat.py`（已知 URL 的文章正文提取）
-3. 合并去重（按 DOI / 标题归一化）。
+   - **多源融合**（v0.6 新增）：并行搜索多个源后，用 `scripts/fuse.py` 按 RRF 算法融合排序
+   - **反思循环**（v0.6 新增）：首次结果不足时，用 `scripts/reflect.py` 自动拆分关键词补充搜索
+3. 合并去重（`scripts/dedup.py`——三级去重：DOI 精确匹配 + 标题归一化 + Jaccard 近重检测）。
 4. 对每篇判断下载路径：
    - **NCPSSD**（`oa: "ncpssd_login"`）：用户提供了账号 → `scripts/search_ncpssd.py --download`
    - **OA（OpenAlex/S2/arXiv）**（`oa: true` 且有 `pdf_url`）→ `scripts/download_oa.py`（8级降级链）
@@ -236,6 +238,100 @@ wechat_articles/
 - `PH_OUT_DIR` / `PH_WECHAT_OUT`：输出目录
 - `PH_COOKIE_FILE`：NCPSSD Cookie 文件路径
 - `PH_S2_API_KEY`：Semantic Scholar API key（可选，提高限额）
+- `PH_RRF_K`：RRF 融合平滑参数（默认 60）
+- `PH_DEDUP_THRESHOLD`：去重 Jaccard 相似度阈值（默认 0.8）
+- `PH_CACHE_TTL`：缓存有效期秒数（默认 604800 = 7 天）
+- `PH_NO_CACHE`：设为 1 禁用缓存
+- `PH_REFLECT_MIN`：触发反思搜索的最少结果数（默认 5）
+- `PH_REFLECT_MAX_EXP`：反思搜索最大子查询数（默认 5）
+
+## RRF 多源结果融合（v0.6 新增）
+
+### 原理
+Reciprocal Rank Fusion (RRF) 是无监督的多源排序融合方法，不需要各源的原始分数，只需排名即可融合。适合 paper-harvester 各检索源分数不可比的场景。
+
+公式：`RRF_score(d) = Σ 1 / (k + rank_i(d))`，k=60（经验值）
+
+### 用法
+```bash
+# 从多个 JSON 文件融合
+python scripts/fuse.py ncpssd_results.json openalex_results.json s2_results.json --query "业法财融合"
+
+# 从 stdin 读取多源 JSON 字典
+cat multi_source.json | python scripts/fuse.py --query "自甘风险" --stdin
+
+# 指定 k 参数
+python scripts/fuse.py src1.json src2.json -k 100 --query "国企合规"
+```
+
+### 输出字段
+每篇文献增加 `rrf_score`（融合分数）、`rrf_sources`（命中的源列表）、`rrf_ranks`（各源排名）。多源命中的文献标记 `multi_source: true`。
+
+## 跨源智能去重（v0.6 新增）
+
+### 三级去重策略
+1. **DOI 精确匹配**：相同 DOI → 同一篇
+2. **标题归一化精确匹配**：去标点/空格/大小写后相同 → 同一篇
+3. **Jaccard 相似度近重检测**：标题 bigram/3-gram 集合 Jaccard 相似度 ≥ 0.8 → 近重
+
+合并策略：保留字段最全的记录，补充缺失字段。
+
+### 用法
+```bash
+# 从 stdin 去重
+cat results.json | python scripts/dedup.py --verbose
+
+# 指定相似度阈值
+python scripts/dedup.py -i results.json -o deduped.json --threshold 0.85
+```
+
+## 搜索结果缓存（v0.6 新增）
+
+### 能力
+- 基于 SQLite（零依赖），相同 query+source+limit 在 TTL 内直接返回缓存
+- 默认 TTL 7 天，可通过 `PH_CACHE_TTL` 调整
+- 支持 `PH_NO_CACHE=1` 全局禁用缓存
+
+### 用法
+```bash
+# 查看缓存统计
+python scripts/cache.py --stats
+
+# 清理过期缓存
+python scripts/cache.py --cleanup
+
+# 清空所有缓存
+python scripts/cache.py --clear
+```
+
+### 编程式调用
+```python
+from cache import cached_search
+
+results = cached_search(
+    source="ncpssd",
+    query="业法财融合",
+    limit=20,
+    search_fn=lambda: search_ncpssd("业法财融合", 20),
+)
+```
+
+## 反思循环搜索（v0.6 新增）
+
+### 能力
+首次搜索结果不足（< `min_results` 条）时自动：
+1. 拆分原始查询为子查询（去停用词、bigram 组合）
+2. 逐个执行补充搜索
+3. 合并去重
+
+### 用法
+```bash
+# NCPSSD 反思搜索
+python scripts/reflect.py "业法财融合" --source ncpssd --min-results 5
+
+# 指定搜索上限和反思阈值
+python scripts/reflect.py "自甘风险" --source ncpssd --limit 20 --min-results 10
+```
 
 ## 统一数据模型
 所有检索脚本输出的文献数据遵循 `scripts/models.py` 定义的 `Paper` TypedDict schema。
