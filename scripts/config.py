@@ -31,8 +31,10 @@ MIN_GAP = float(os.environ.get("PH_MIN_GAP", "2.0"))  # OA 源每篇最小间隔
 MAX_PER_MIN = int(os.environ.get("PH_MAX_PER_MIN", "20"))  # 每分钟最大下载数
 IMG_DELAY = float(os.environ.get("PH_IMG_DELAY", "0.3"))  # 图片下载间隔
 
-# NCPSSD 下载限速（防封号）——搜索不限速，下载最快30秒/次
-NCPSSD_DOWNLOAD_GAP = float(os.environ.get("PH_NCPSSD_DL_GAP", "30.0"))  # NCPSSD 下载最小间隔秒
+# NCPSSD 限速（防 WAF 拦截）
+NCPSSD_SEARCH_GAP_MIN = float(os.environ.get("PH_NCPSSD_SEARCH_GAP_MIN", "20.0"))  # 搜索最小间隔秒
+NCPSSD_SEARCH_GAP_MAX = float(os.environ.get("PH_NCPSSD_SEARCH_GAP_MAX", "60.0"))  # 搜索最大间隔秒
+NCPSSD_DOWNLOAD_GAP = float(os.environ.get("PH_NCPSSD_DL_GAP", "30.0"))  # 下载最小间隔秒
 
 # ── 重试与降级 ────────────────────────────────────────
 MAX_RETRIES = int(os.environ.get("PH_MAX_RETRIES", "3"))

@@ -27,7 +27,7 @@
 依赖: requests, beautifulsoup4
   pip install requests beautifulsoup4
 """
-import sys, os, json, re, time, argparse, signal
+import sys, os, json, re, time, argparse, signal, random
 from pathlib import Path
 from datetime import datetime
 
@@ -48,6 +48,7 @@ from config import (
     NCPSSD_JOURNAL_API as JOURNAL_API,
     NCPSSD_USERNAME, NCPSSD_PASSWORD,
     UA, OUT_DIR, COOKIE_FILE, MIN_GAP, NCPSSD_DOWNLOAD_GAP,
+    NCPSSD_SEARCH_GAP_MIN, NCPSSD_SEARCH_GAP_MAX,
     MAX_RESULTS_DEFAULT, PAGE_SIZE_MAX,
     REQUEST_TIMEOUT, DOWNLOAD_TIMEOUT, MAX_RETRIES, BACKOFF_FACTOR,
 )
@@ -92,6 +93,17 @@ def search(query: str, limit: int = MAX_RESULTS_DEFAULT, session: requests.Sessi
     """
     sess = session or requests.Session()
     sess.headers.update({"User-Agent": UA, "Referer": BASE + "/"})
+
+    # 先访问首页获取 Cookie（模拟浏览器行为，避免 WAF 拦截）
+    try:
+        sess.get(BASE, timeout=15)
+    except Exception:
+        pass
+
+    # 随机等待 20~60 秒（防 WAF 静默拦截）
+    gap = random.uniform(NCPSSD_SEARCH_GAP_MIN, NCPSSD_SEARCH_GAP_MAX)
+    print(f"[NCPSSD] 等待 {gap:.1f} 秒后搜索（防 WAF 拦截）...", file=sys.stderr)
+    time.sleep(gap)
 
     # 构造搜索条件
     if journal:
