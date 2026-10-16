@@ -43,6 +43,9 @@ desktop.ini
 .env
 ncpssd_cookies.json
 
+# Cache (SQLite search cache)
+.cache/
+
 # Test outputs
 test_pdfs/
 test_chinarxiv/
